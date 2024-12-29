@@ -1,3 +1,5 @@
+下面是优化后的`README.md`内容：
+
 # 代码行数统计工具
 
 这是一个用Python编写的代码行数统计工具，可以统计项目中不同编程语言的代码行数。
@@ -14,32 +16,27 @@
 ## 使用方法
 
 1. 确保您的系统已安装Python 3.x
-
 2. 安装依赖包：
-   
-   ```bash
-   pip install -r requirements.txt
-   ```
-
+    ```bash
+    pip install -r requirements.txt
+    ```
 3. 运行脚本：
-   
-   ```bash
-   # 方式1：命令行参数指定目录
-   python code_counter.py /path/to/your/code
-   
-   # 方式2：交互式输入
-   python code_counter.py
-   > 请输入要统计的目录路径（直接回车则统计当前目录）：
-   > /path/to/your/code
-   
-   # 显示帮助信息
-   python code_counter.py --help
-   ```
+    ```bash
+    # 方式1：命令行参数指定目录
+    python code_counter.py /path/to/your/code
+
+    # 方式2：交互式输入
+    python code_counter.py
+    > 请输入要统计的目录路径（直接回车则统计当前目录）：
+    > /path/to/your/code
+
+    # 显示帮助信息
+    python code_counter.py --help
+    ```
 
 ## 支持的文件类型
 
 包括但不限于：
-
 - 常见编程语言：Python, Java, C/C++, JavaScript等
 - 微信小程序：WXML, WXSS, WXS
 - Web开发：HTML, CSS, Vue, React等
@@ -49,7 +46,6 @@
 ## 排除规则
 
 自动排除以下内容：
-
 - 构建目录：node_modules, venv, dist等
 - IDE配置目录：.idea, .vs等
 - 编译文件：.pyc, .exe, .dll等
@@ -59,20 +55,16 @@
 ## 输出格式
 
 代码统计结果:
+```
 ----------------------------------------
-
 语言         行数
 ----------------------------------------
-
-----------------------------------------
-
-Python                100
+Python               100
 JavaScript           200
-CSS                      150
-
+CSS                  150
 ----------------------------------------
-
 总计 450
+```
 
 ## 注意事项
 

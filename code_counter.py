@@ -2,13 +2,107 @@ import os
 import sys
 from collections import defaultdict
 
-def count_lines_by_extension(directory='.'):
+def format_size(size):
+    """将字节大小转换为人类可读格式"""
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size < 1024:
+            return f"{size:.2f}{unit}"
+        size /= 1024
+    return f"{size:.2f}TB"
+
+def save_to_log(directory, language_counts, total_lines, file_stats=None, detailed=False):
     """
-    统计指定目录下各种编程语言的代码行数
+    将统计结果保存到日志文件
     
     Args:
-        directory (str): 要统计的目录路径，默认为当前目录
+        directory (str): 统计的目录路径
+        language_counts (dict): 各语言的行数统计
+        total_lines (int): 总行数
+        file_stats (dict): 文件统计信息
+        detailed (bool): 是否输出详细信息
     """
+    from datetime import datetime
+    
+    log_dir = 'logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = os.path.join(log_dir, f'code_count_{timestamp}.log')
+    
+    with open(log_file, 'w', encoding='utf-8') as f:
+        f.write(f"代码统计结果 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"统计目录: {os.path.abspath(directory)}\n\n")
+        
+        # 写入总体统计
+        f.write("总体统计\n")
+        f.write("=" * 60 + "\n")
+        f.write(f"总代码行数: {total_lines:>10}\n")
+        if file_stats:
+            f.write(f"文件总数: {file_stats['total_files']:>12}\n")
+            f.write(f"总大小: {format_size(file_stats['total_size']):>14}\n")
+        f.write("\n")
+        
+        # 写入语言统计
+        f.write("语言统计\n")
+        f.write("=" * 60 + "\n")
+        header = f"{'语言':<20}{'行数':>12}{'文件数':>10}{'大小':>15}\n"
+        f.write(header)
+        f.write("-" * 60 + "\n")
+        
+        # 写入微信小程序相关统计
+        wx_categories = ['微信模板', '微信样式', '微信脚本']
+        for category in wx_categories:
+            if language_counts[category] > 0:
+                stats = file_stats.get(category, {})
+                f.write(f"{category:<20}{language_counts[category]:>12}"
+                       f"{stats.get('files', 0):>10}"
+                       f"{format_size(stats.get('size', 0)):>15}\n")
+        
+        # 写入其他语言统计
+        for language, count in sorted(language_counts.items()):
+            if language not in wx_categories:
+                stats = file_stats.get(language, {})
+                f.write(f"{language:<20}{count:>12}"
+                       f"{stats.get('files', 0):>10}"
+                       f"{format_size(stats.get('size', 0)):>15}\n")
+        f.write("-" * 60 + "\n")
+        
+        # 如果需要详细信息，添加文件列表
+        if detailed and file_stats and 'files' in file_stats:
+            f.write("\n详细文件列表\n")
+            f.write("=" * 100 + "\n")
+            header = f"{'文件路径':<60}{'大小':>12}{'修改时间':>25}\n"
+            f.write(header)
+            f.write("-" * 100 + "\n")
+            
+            for file_info in file_stats['files']:
+                path = file_info['path']
+                size = format_size(file_info['size'])
+                mtime = datetime.fromtimestamp(file_info['mtime']).strftime('%Y-%m-%d %H:%M:%S')
+                f.write(f"{path:<60}{size:>12}{mtime:>25}\n")
+    
+    print(f"\n统计结果已保存到: {log_file}")
+
+def load_ignore_patterns():
+    """加载忽略文件模式"""
+    ignore_file = '.codeignore'
+    patterns = set()
+    if os.path.exists(ignore_file):
+        with open(ignore_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    patterns.add(line)
+    return patterns
+
+def should_ignore(path, ignore_patterns):
+    """检查是否应该忽略该路径"""
+    from fnmatch import fnmatch
+    return any(fnmatch(path, pattern) for pattern in ignore_patterns)
+
+def count_lines_by_extension(directory='.', detailed=False):
+    """统计指定目录下各种编程语言的代码行数"""
     # 只保留项目源代码相关的文件类型
     extension_map = {
         '.c': 'C',
@@ -251,6 +345,14 @@ def count_lines_by_extension(directory='.'):
     
     # 用于存储每种语言的行数
     language_counts = defaultdict(int)
+    file_stats = {
+        'total_files': 0,
+        'total_size': 0,
+        'files': [],
+    }
+    
+    # 加载忽略模式
+    ignore_patterns = load_ignore_patterns()
     
     # 注释标记
     single_line_comment_markers = {
@@ -350,66 +452,90 @@ def count_lines_by_extension(directory='.'):
     
     # 遍历指定目录及其子目录
     for root, dirs, files in os.walk(directory):
-        # 移除所有以点开头的目录和需要排除的目录
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in exclude_dirs]
-            
+        # 移除需要排除的目录
+        dirs[:] = [d for d in dirs if not d.startswith('.') 
+                  and d not in exclude_dirs
+                  and not should_ignore(os.path.join(root, d), ignore_patterns)]
+        
         for file in files:
-            # 跳过以点开头的文件
-            if file.startswith('.'):
+            if file.startswith('.') or file in exclude_filenames:
                 continue
                 
-            # 跳过指定的文件名
-            if file in exclude_filenames:
+            file_path = os.path.join(root, file)
+            if should_ignore(file_path, ignore_patterns):
                 continue
                 
-            # 获取文件扩展名
             ext = os.path.splitext(file)[1].lower()
-            
-            # 跳过需要排除的文件类型
             if ext in exclude_extensions:
                 continue
-                
-            # 跳过测试文件
+            
             if 'test' in file.lower() or 'spec' in file.lower():
                 continue
                 
-            if ext in extension_map:
-                try:
-                    file_path = os.path.join(root, file)
+            try:
+                file_size = os.path.getsize(file_path)
+                file_mtime = os.path.getmtime(file_path)
+                
+                if ext in extension_map:
+                    language = extension_map[ext]
                     with open(file_path, 'r', encoding='utf-8') as f:
-                        lines = 0
-                        for line in f:
-                            stripped_line = line.strip()
-                            if not stripped_line:
-                                continue
-                            if ext in single_line_comment_markers and stripped_line.startswith(single_line_comment_markers[ext]):
-                                continue
-                            lines += 1
-                        language_counts[extension_map[ext]] += lines
-                except:
-                    # 如果文件无法读取，跳过该文件
-                    continue
-
+                        lines = sum(1 for line in f if line.strip() 
+                                  and not (ext in single_line_comment_markers 
+                                         and line.strip().startswith(single_line_comment_markers[ext])))
+                        
+                        language_counts[language] += lines
+                        
+                        # 更新文件统计信息
+                        if language not in file_stats:
+                            file_stats[language] = {'files': 0, 'size': 0}
+                        file_stats[language]['files'] += 1
+                        file_stats[language]['size'] += file_size
+                        
+                        if detailed:
+                            file_stats['files'].append({
+                                'path': os.path.relpath(file_path, directory),
+                                'size': file_size,
+                                'mtime': file_mtime,
+                                'language': language,
+                                'lines': lines
+                            })
+                
+                file_stats['total_files'] += 1
+                file_stats['total_size'] += file_size
+                
+            except:
+                continue
+    
     # 打印结果
     print("\n代码统计结果:")
     print("-" * 40)
-    print(f"{'语言':<15}{'行数':>10}")
+    print(f"总文件数: {file_stats['total_files']}")
+    print(f"总大小: {format_size(file_stats['total_size'])}")
+    print("-" * 40)
+    print(f"{'语言':<15}{'行数':>10}{'文件数':>10}{'大小':>12}")
     print("-" * 40)
     
     # 首先打印微信小程序相关的统计
     wx_categories = ['微信模板', '微信样式', '微信脚本']
     for category in wx_categories:
         if language_counts[category] > 0:
-            print(f"{category:<15}{language_counts[category]:>10}")
+            stats = file_stats.get(category, {})
+            print(f"{category:<15}{language_counts[category]:>10}"
+                   f"{stats.get('files', 0):>10}{format_size(stats.get('size', 0)):>12}")
             
     # 然后打印其他语言的统计
     for language, count in sorted(language_counts.items()):
         if language not in wx_categories:  # 跳过已经打印的微信相关类别
-            print(f"{language:<15}{count:>10}")
+            stats = file_stats.get(language, {})
+            print(f"{language:<15}{count:>10}"
+                   f"{stats.get('files', 0):>10}{format_size(stats.get('size', 0)):>12}")
     
     total_lines = sum(language_counts.values())
     print("-" * 40)
     print(f"{'总计':<15}{total_lines:>10}")
+    
+    # 保存结果到日志文件
+    save_to_log(directory, language_counts, total_lines, file_stats, detailed)
 
 def print_usage():
     """打印使用说明"""
@@ -417,14 +543,19 @@ def print_usage():
 代码行数统计工具
 
 用法:
-    python code_counter.py [目录路径]
+    python code_counter.py [选项] [目录路径]
 
+选项:
+    -h, --help      显示帮助信息
+    -d, --detailed  输出详细的文件列表
+    
 参数:
-    目录路径    可选，要统计的目录路径，默认为当前目录
+    目录路径        可选，要统计的目录路径，默认为当前目录
 
 示例:
     python code_counter.py                 # 统计当前目录
     python code_counter.py /path/to/code   # 统计指定目录
+    python code_counter.py -d              # 输出详细信息
     """)
 
 def get_directory_input():
@@ -435,19 +566,23 @@ def get_directory_input():
 
 if __name__ == '__main__':
     try:
-        # 获取命令行参数
-        if len(sys.argv) > 2:
-            print("错误：参数过多")
-            print_usage()
-            sys.exit(1)
+        detailed = False
+        directory = '.'
         
-        if len(sys.argv) == 2:
-            if sys.argv[1] in ['-h', '--help']:
+        # 处理命令行参数
+        args = sys.argv[1:]
+        while args:
+            arg = args.pop(0)
+            if arg in ['-h', '--help']:
                 print_usage()
                 sys.exit(0)
-            directory = sys.argv[1]
-        else:
-            # 如果没有命令行参数，通过交互方式获取目录
+            elif arg in ['-d', '--detailed']:
+                detailed = True
+            else:
+                directory = arg
+        
+        # 如果没有指定目录，通过交互方式获取
+        if directory == '.':
             directory = get_directory_input()
         
         # 验证目录是否有效
@@ -459,7 +594,7 @@ if __name__ == '__main__':
             sys.exit(1)
         
         # 执行统计
-        count_lines_by_extension(directory)
+        count_lines_by_extension(directory, detailed)
         
     except KeyboardInterrupt:
         print("\n统计被用户中断")

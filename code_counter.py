@@ -10,9 +10,9 @@ def format_size(size):
         size /= 1024
     return f"{size:.2f}TB"
 
-def save_to_log(directory, language_counts, total_lines, file_stats=None, detailed=False):
+def generate_html_report(directory, language_counts, total_lines, file_stats=None, detailed=False):
     """
-    将统计结果保存到日志文件
+    生成HTML格式的统计报告
     
     Args:
         directory (str): 统计的目录路径
@@ -23,66 +23,361 @@ def save_to_log(directory, language_counts, total_lines, file_stats=None, detail
     """
     from datetime import datetime
     
-    log_dir = 'logs'
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    report_dir = 'reports'
+    if not os.path.exists(report_dir):
+        os.makedirs(report_dir)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = os.path.join(log_dir, f'code_count_{timestamp}.log')
+    html_file = os.path.join(report_dir, f'code_report_{timestamp}.html')
     
-    with open(log_file, 'w', encoding='utf-8') as f:
-        f.write(f"代码统计结果 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"统计目录: {os.path.abspath(directory)}\n\n")
+    # HTML模板
+    html_content = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代码统计报告 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
         
-        # 写入总体统计
-        f.write("总体统计\n")
-        f.write("=" * 60 + "\n")
-        f.write(f"总代码行数: {total_lines:>10}\n")
-        if file_stats:
-            f.write(f"文件总数: {file_stats['total_files']:>12}\n")
-            f.write(f"总大小: {format_size(file_stats['total_size']):>14}\n")
-        f.write("\n")
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }}
         
-        # 写入语言统计
-        f.write("语言统计\n")
-        f.write("=" * 60 + "\n")
-        header = f"{'语言':<20}{'行数':>12}{'文件数':>10}{'大小':>15}\n"
-        f.write(header)
-        f.write("-" * 60 + "\n")
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }}
         
-        # 写入微信小程序相关统计
-        wx_categories = ['微信模板', '微信样式', '微信脚本']
-        for category in wx_categories:
-            if language_counts[category] > 0:
-                stats = file_stats.get(category, {})
-                f.write(f"{category:<20}{language_counts[category]:>12}"
-                       f"{stats.get('files', 0):>10}"
-                       f"{format_size(stats.get('size', 0)):>15}\n")
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }}
         
-        # 写入其他语言统计
-        for language, count in sorted(language_counts.items()):
-            if language not in wx_categories:
-                stats = file_stats.get(language, {})
-                f.write(f"{language:<20}{count:>12}"
-                       f"{stats.get('files', 0):>10}"
-                       f"{format_size(stats.get('size', 0)):>15}\n")
-        f.write("-" * 60 + "\n")
+        .header h1 {{
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }}
         
-        # 如果需要详细信息，添加文件列表
-        if detailed and file_stats and 'files' in file_stats:
-            f.write("\n详细文件列表\n")
-            f.write("=" * 100 + "\n")
-            header = f"{'文件路径':<60}{'大小':>12}{'修改时间':>25}\n"
-            f.write(header)
-            f.write("-" * 100 + "\n")
+        .header p {{
+            font-size: 1.1em;
+            opacity: 0.9;
+        }}
+        
+        .header .timestamp {{
+            margin-top: 10px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }}
+        
+        .content {{
+            padding: 40px;
+        }}
+        
+        .section {{
+            margin-bottom: 40px;
+        }}
+        
+        .section-title {{
+            font-size: 1.8em;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }}
+        
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        
+        .stat-card {{
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }}
+        
+        .stat-card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }}
+        
+        .stat-value {{
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }}
+        
+        .stat-label {{
+            font-size: 1.1em;
+            color: #666;
+            font-weight: 500;
+        }}
+        
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }}
+        
+        thead {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }}
+        
+        th {{
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 1.1em;
+        }}
+        
+        td {{
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }}
+        
+        tbody tr {{
+            transition: background-color 0.2s;
+        }}
+        
+        tbody tr:hover {{
+            background-color: #f8f9fa;
+        }}
+        
+        tbody tr:last-child td {{
+            border-bottom: none;
+        }}
+        
+        .language-name {{
+            font-weight: 600;
+            color: #333;
+        }}
+        
+        .number {{
+            text-align: right;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #555;
+        }}
+        
+        .file-list {{
+            max-height: 600px;
+            overflow-y: auto;
+        }}
+        
+        .file-list table {{
+            font-size: 0.9em;
+        }}
+        
+        .file-path {{
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #667eea;
+            word-break: break-all;
+        }}
+        
+        .footer {{
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }}
+        
+        @media (max-width: 768px) {{
+            .header h1 {{
+                font-size: 1.8em;
+            }}
             
-            for file_info in file_stats['files']:
-                path = file_info['path']
-                size = format_size(file_info['size'])
-                mtime = datetime.fromtimestamp(file_info['mtime']).strftime('%Y-%m-%d %H:%M:%S')
-                f.write(f"{path:<60}{size:>12}{mtime:>25}\n")
+            .content {{
+                padding: 20px;
+            }}
+            
+            .stats-grid {{
+                grid-template-columns: 1fr;
+            }}
+            
+            table {{
+                font-size: 0.85em;
+            }}
+            
+            th, td {{
+                padding: 8px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 代码统计报告</h1>
+            <p>统计目录: {os.path.abspath(directory)}</p>
+            <div class="timestamp">生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>
+        </div>
+        
+        <div class="content">
+            <!-- 总体统计 -->
+            <div class="section">
+                <h2 class="section-title">📈 总体统计</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">{total_lines:,}</div>
+                        <div class="stat-label">总代码行数</div>
+                    </div>"""
     
-    print(f"\n统计结果已保存到: {log_file}")
+    if file_stats:
+        html_content += f"""
+                    <div class="stat-card">
+                        <div class="stat-value">{file_stats['total_files']:,}</div>
+                        <div class="stat-label">文件总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{format_size(file_stats['total_size'])}</div>
+                        <div class="stat-label">总大小</div>
+                    </div>"""
+    
+    html_content += """
+                </div>
+            </div>
+            
+            <!-- 语言统计 -->
+            <div class="section">
+                <h2 class="section-title">🔤 语言统计</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>语言</th>
+                            <th style="text-align: right;">行数</th>
+                            <th style="text-align: right;">文件数</th>
+                            <th style="text-align: right;">大小</th>
+                        </tr>
+                    </thead>
+                    <tbody>"""
+    
+    # 写入微信小程序相关统计
+    wx_categories = ['微信模板', '微信样式', '微信脚本']
+    for category in wx_categories:
+        if language_counts[category] > 0:
+            stats = file_stats.get(category, {}) if file_stats else {}
+            files_count = stats.get('files', 0)
+            size = format_size(stats.get('size', 0))
+            html_content += f"""
+                        <tr>
+                            <td class="language-name">{category}</td>
+                            <td class="number">{language_counts[category]:,}</td>
+                            <td class="number">{files_count:,}</td>
+                            <td class="number">{size}</td>
+                        </tr>"""
+    
+    # 写入其他语言统计
+    for language, count in sorted(language_counts.items()):
+        if language not in wx_categories:
+            stats = file_stats.get(language, {}) if file_stats else {}
+            files_count = stats.get('files', 0)
+            size = format_size(stats.get('size', 0))
+            html_content += f"""
+                        <tr>
+                            <td class="language-name">{language}</td>
+                            <td class="number">{count:,}</td>
+                            <td class="number">{files_count:,}</td>
+                            <td class="number">{size}</td>
+                        </tr>"""
+    
+    html_content += """
+                    </tbody>
+                </table>
+            </div>"""
+    
+    # 如果需要详细信息，添加文件列表
+    if detailed and file_stats and 'files' in file_stats and file_stats['files']:
+        html_content += """
+            
+            <!-- 详细文件列表 -->
+            <div class="section">
+                <h2 class="section-title">📁 详细文件列表</h2>
+                <div class="file-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>文件路径</th>
+                                <th style="text-align: right;">语言</th>
+                                <th style="text-align: right;">行数</th>
+                                <th style="text-align: right;">大小</th>
+                                <th style="text-align: right;">修改时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>"""
+        
+        for file_info in sorted(file_stats['files'], key=lambda x: x['path']):
+            path = file_info['path']
+            size = format_size(file_info['size'])
+            mtime = datetime.fromtimestamp(file_info['mtime']).strftime('%Y-%m-%d %H:%M:%S')
+            language = file_info.get('language', 'Unknown')
+            lines = file_info.get('lines', 0)
+            html_content += f"""
+                            <tr>
+                                <td class="file-path">{path}</td>
+                                <td class="number">{language}</td>
+                                <td class="number">{lines:,}</td>
+                                <td class="number">{size}</td>
+                                <td class="number">{mtime}</td>
+                            </tr>"""
+        
+        html_content += """
+                        </tbody>
+                    </table>
+                </div>
+            </div>"""
+    
+    html_content += """
+        </div>
+        
+        <div class="footer">
+            <p>Generated by Code Counter Tool | Python Code Statistics Report</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    with open(html_file, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    
+    print(f"\n📊 HTML报告已保存到: {html_file}")
+
+def save_to_log(directory, language_counts, total_lines, file_stats=None, detailed=False):
+    """
+    将统计结果保存到HTML报告文件
+    
+    Args:
+        directory (str): 统计的目录路径
+        language_counts (dict): 各语言的行数统计
+        total_lines (int): 总行数
+        file_stats (dict): 文件统计信息
+        detailed (bool): 是否输出详细信息
+    """
+    generate_html_report(directory, language_counts, total_lines, file_stats, detailed)
 
 def load_ignore_patterns():
     """加载忽略文件模式"""
